@@ -15,7 +15,7 @@ A busy pet owner needs help staying consistent with pet care. They want an assis
 - **Owner, multiple pets, and tasks**: each task has a start time, duration, priority, repeat frequency, due date, and completion status.
 - **Sorting by time**: tasks are listed chronologically by date, then start time.
 - **Filtering**: by pet, by completion status, or by due date, in any combination.
-- **Daily and weekly recurrence**: completing a repeating task automatically creates the next one (+1 day or +7 days).
+- **Daily and weekly recurrence**: completing a repeating task automatically creates the next one, due 1 or 7 days after the later of its due date and the day it was completed (so finishing an overdue daily task schedules the next one for tomorrow, not another missed day).
 - **Conflict warnings**: overlapping tasks are flagged with a readable warning, including tasks for *different* pets, since one owner can't be in two places at once.
 - **Time-budgeted daily plan**: picks the highest-priority tasks that fit the owner's available minutes, lists what was left out and why, and explains each scheduled task.
 - **Overdue carry-over**: an unfinished task from an earlier day still shows up in today's plan, marked "overdue."
@@ -29,6 +29,7 @@ A busy pet owner needs help staying consistent with pet care. They want an assis
 | `main.py` | CLI demo that exercises every feature in the terminal |
 | `app.py` | Streamlit UI wired to the logic layer |
 | `tests/test_pawpal.py` | Automated pytest suite |
+| `diagrams/uml_draft.mmd` | Phase 1 draft class diagram (the initial four-class design) |
 | `diagrams/uml_final.mmd` | Mermaid class diagram of the final design (`uml_final.png` is a rendered copy) |
 
 ## Getting started
@@ -114,12 +115,12 @@ python -m pytest                       # run the full suite
 python -m pytest --cov=pawpal_system   # with coverage (needs pytest-cov, included in requirements.txt)
 ```
 
-The suite (26 tests) covers:
+The suite (29 tests) covers:
 
 - **Basics**: `mark_complete()` flips status; adding a task increases a pet's task count.
 - **Sorting**: chronological order; unpadded times like `9:00` sort before `10:00`; date sorts before time.
 - **Filtering**: by pet (case-insensitive), by status, and both combined; a pet with no tasks.
-- **Recurrence**: daily → +1 day, weekly → +7 days, one-time tasks don't repeat, completing twice doesn't create a duplicate, and a task can't be completed under the wrong pet.
+- **Recurrence**: daily → +1 day, weekly → +7 days, one-time tasks don't repeat, completing twice doesn't create a duplicate, a task can't be completed under the wrong pet, an overdue task's next copy is scheduled from the completion day (regression test), and completing a future task early keeps its cadence.
 - **Conflicts**: exact same start time, partial overlap, back-to-back (*not* a conflict), and one long task overlapping several shorter ones.
 - **Daily plan**: high priority kept when time runs out; completed and future tasks excluded; overdue tasks included and labeled.
 - **Validation**: bad times, durations, priorities, frequencies, empty descriptions, past-midnight tasks, and duplicate pet names are rejected.
@@ -128,16 +129,16 @@ Sample test output:
 
 ```
 ============================= test session starts ==============================
-collected 26 items
+collected 29 items
 
-tests/test_pawpal.py ..........................                          [100%]
+tests/test_pawpal.py .............................                       [100%]
 
-============================== 26 passed in 0.05s ==============================
+============================== 29 passed in 0.03s ==============================
 ```
 
 Coverage of `pawpal_system.py`: 93%.
 
-**Confidence level: ★★★★☆ (4/5).** Every core behavior has a test, and each test was checked by deliberately breaking the code to confirm it fails. One star is held back because the Streamlit UI is only smoke-tested, not covered by the automated suite, and the scheduler doesn't model things like tasks that span midnight or owner time windows.
+**Confidence level: ★★★★☆ (4/5).** Every core behavior has a test. The recurrence regression tests were confirmed to fail when the old bug is put back, and to pass with the fix. One star is held back because the Streamlit UI is only smoke-tested, not covered by the automated suite, and the scheduler doesn't model things like tasks that span midnight or owner time windows.
 
 ## 📐 Smarter Scheduling
 
@@ -147,7 +148,7 @@ Coverage of `pawpal_system.py`: 93%.
 | Filtering | `Scheduler.filter_tasks(pet_name, completed, due_on)`, `Scheduler.tasks_due(day)` | Filters combine; any left as `None` is ignored. `tasks_due` returns incomplete tasks due that day *or overdue*. |
 | Time-budget selection | `Scheduler.build_daily_plan(day)` | Greedy: highest priority first (earlier start breaks ties), keep each task if it still fits the remaining minutes. Skipped tasks are reported with a reason. |
 | Conflict handling | `Scheduler.detect_conflicts(entries)` | Flags any overlap of `[start, end)` windows, across all pets. Returns warning strings instead of raising. Back-to-back tasks are fine. |
-| Recurring tasks | `Task.mark_complete()`, `Task.next_occurrence()`, `Scheduler.mark_task_complete()` | Completing a daily/weekly task creates a copy due `+1 day`/`+7 days` using `timedelta`, and adds it to the same pet. |
+| Recurring tasks | `Task.mark_complete()`, `Task.next_occurrence()`, `Scheduler.mark_task_complete()` | Completing a daily/weekly task creates a copy due `+1 day`/`+7 days` (via `timedelta`), counted from the later of the due date and the completion day, and adds it to the same pet. |
 | Explanations | `DailyPlan.explain()`, `PlanItem.reason` | Every scheduled or skipped task carries a plain-English reason. |
 
 ## 📸 Demo Walkthrough

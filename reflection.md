@@ -26,6 +26,7 @@ Two small result classes, **`DailyPlan`** and **`PlanItem`**, carry the schedule
 - **Tasks don't store their pet.** The scheduler passes `(pet, task)` pairs instead. A back-reference would mean every task has to be kept in sync with its pet, so pairs keep `Task` simpler. The cost: method signatures say `list[Entry]` instead of `list[Task]`.
 - **Added `DailyPlan`/`PlanItem`.** The first idea was for the scheduler to return a sorted list. But the scenario asks the app to *explain* its plan, so each task needed a reason attached, and skipped tasks needed a place to go.
 - **Identity, not equality, for tasks.** Dataclasses compare by value, so two identical "Walk 07:00" tasks are `==`. `Pet.remove_task` and `replace_task` find tasks with `is` so the wrong one is never removed.
+- **Recurrence counted from the wrong date (found in a later code review):** the next copy of a recurring task was originally `due_date + 1 day`. For a task missed three days ago, that copy was still overdue and reappeared in today's plan right after being completed. The fix counts from the later of the due date and the completion day. All 26 original tests passed with the bug in place; new regression tests now cover it.
 - **Bug found while wiring the UI:** Streamlit's selectbox handed back a *copy* of the selected task object, so "Mark complete" failed to find the real task. The fix was to select by list index and look up the real object.
 
 ✍️ *Add: which of these came from AI feedback on the skeleton (Phase 1 Step 5) vs. from my own testing, and whether I agreed.*
@@ -53,7 +54,7 @@ Priority comes first because missing a high-priority task like medication matter
 - **Greedy selection, not optimal.** The scheduler takes the highest-priority tasks first and keeps each one if it still fits. In the demo, with 15 minutes left, it skipped a 20-minute *medium* task and kept a 15-minute *low* task. A perfect solver (a knapsack algorithm) could maximize total priority, but it would be harder to read and harder to explain. For a handful of daily tasks, greedy is usually right, and its reasoning fits in one sentence.
 - **Conflicts are warned about, not fixed.** Overlapping tasks still both appear in the plan with a warning. Auto-moving a task could put a pill at a time the vet didn't intend, so the owner decides.
 - **Overlap uses full duration, not just exact start times.** This catches a 07:30–08:00 walk clashing with a 07:45 feeding, which exact-match checking would miss.
-- **Recurrence only advances on completion.** A daily task that's never marked done doesn't spawn tomorrow's copy. It shows as "overdue" instead, so a missed task stays visible rather than piling up duplicates.
+- **Recurrence only advances on completion.** A daily task that's never marked done doesn't spawn tomorrow's copy. It shows as "overdue" instead, so a missed task stays visible rather than piling up duplicates. When it *is* completed, the next copy counts from the completion day, so missed days are skipped rather than made up. The cost: a weekly task done two days late shifts to a new weekday instead of keeping its original one.
 - **No tasks across midnight.** These are rejected rather than modeled, which keeps time math to one day.
 
 ---
@@ -71,6 +72,7 @@ Priority comes first because missing a high-priority task like medication matter
 Candidate examples to check against what actually happened:
 - The AI's code passed all tests on the first run. That isn't proof the tests work, so bugs were planted on purpose (e.g. changing `>=` to `>` in conflict detection) to confirm each test fails when it should.
 - The Streamlit selectbox copy bug only showed up when the UI was actually exercised; the unit tests didn't catch it.
+- The AI-generated recurrence logic and its tests all passed, yet completing an overdue daily task made it reappear immediately. A later review caught it by probing an edge case the tests never tried.
 
 ---
 
@@ -78,11 +80,11 @@ Candidate examples to check against what actually happened:
 
 **a. What you tested**
 
-26 tests covering:
+29 tests covering:
 - **Task completion and addition.**
 - **Sorting**: chronological order, unpadded times, date before time.
 - **Filtering**: by pet, by status, combined; a pet with no tasks.
-- **Recurrence**: daily, weekly, one-time, double completion, wrong pet.
+- **Recurrence**: daily, weekly, one-time, double completion, wrong pet, overdue tasks completed late, future tasks completed early.
 - **Conflict detection**: exact match, partial overlap, back-to-back, one long task overlapping several.
 - **Daily-plan selection**: under a tight budget; completed, future and overdue tasks.
 - **Input validation.**
