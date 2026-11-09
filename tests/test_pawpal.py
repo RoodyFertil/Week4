@@ -96,7 +96,7 @@ def test_completing_daily_task_creates_next_day_instance(setup):
     owner, dog, _, scheduler = setup
     walk = Task("Walk", "07:00", frequency="daily", due_date=DAY)
     dog.add_task(walk)
-    nxt = scheduler.mark_task_complete("Mochi", walk)
+    nxt = scheduler.mark_task_complete("Mochi", walk, on=DAY)
     assert nxt is not None
     assert nxt.due_date == DAY + timedelta(days=1)
     assert nxt.completed is False and nxt.time == "07:00"
@@ -107,7 +107,7 @@ def test_completing_weekly_task_creates_instance_seven_days_later(setup):
     _, _, cat, scheduler = setup
     brush = Task("Brush", "19:00", frequency="weekly", due_date=DAY)
     cat.add_task(brush)
-    assert scheduler.mark_task_complete("Luna", brush).due_date == DAY + timedelta(days=7)
+    assert scheduler.mark_task_complete("Luna", brush, on=DAY).due_date == DAY + timedelta(days=7)
 
 
 def test_one_time_task_does_not_recur(setup):
@@ -125,6 +125,32 @@ def test_completing_twice_does_not_duplicate_next_occurrence(setup):
     scheduler.mark_task_complete("Mochi", walk)
     assert scheduler.mark_task_complete("Mochi", walk) is None
     assert dog.task_count() == 2
+
+
+def test_completing_overdue_daily_task_schedules_from_completion_day(setup):
+    # Regression: next copy used to be old due_date + 1, so a task missed 3 days ago
+    # spawned a copy that was *still* overdue and reappeared in today's plan.
+    _, dog, _, scheduler = setup
+    walk = Task("Walk", "07:00", frequency="daily", due_date=DAY - timedelta(days=3))
+    dog.add_task(walk)
+    nxt = scheduler.mark_task_complete("Mochi", walk, on=DAY)
+    assert nxt.due_date == DAY + timedelta(days=1)
+    assert scheduler.build_daily_plan(DAY).scheduled == []
+
+
+def test_completing_overdue_weekly_task_schedules_a_week_after_completion(setup):
+    _, _, cat, scheduler = setup
+    brush = Task("Brush", "19:00", frequency="weekly", due_date=DAY - timedelta(days=2))
+    cat.add_task(brush)
+    assert scheduler.mark_task_complete("Luna", brush, on=DAY).due_date == DAY + timedelta(days=7)
+
+
+def test_completing_a_future_task_early_keeps_its_cadence(setup):
+    # Doing tomorrow's walk today shouldn't schedule another one for tomorrow.
+    _, dog, _, scheduler = setup
+    walk = Task("Walk", "07:00", frequency="daily", due_date=DAY + timedelta(days=1))
+    dog.add_task(walk)
+    assert scheduler.mark_task_complete("Mochi", walk, on=DAY).due_date == DAY + timedelta(days=2)
 
 
 def test_mark_complete_rejects_task_from_another_pet(setup):

@@ -85,19 +85,24 @@ class Task:
         """Numeric priority (high=3, medium=2, low=1) for sorting."""
         return PRIORITY_RANK[self.priority]
 
-    def mark_complete(self) -> Optional["Task"]:
-        """Mark this task done and return its next occurrence if it recurs, else None."""
+    def mark_complete(self, on: Optional[date] = None) -> Optional["Task"]:
+        """Mark this task done (on `on`, default today) and return its next occurrence if it recurs."""
         if self.completed:
             return None  # completing twice must not spawn a duplicate next occurrence
         self.completed = True
-        return self.next_occurrence()
+        return self.next_occurrence(on)
 
-    def next_occurrence(self) -> Optional["Task"]:
-        """Build the next instance of a daily/weekly task (due_date + 1 day or + 7 days)."""
+    def next_occurrence(self, completed_on: Optional[date] = None) -> Optional["Task"]:
+        """Build the next daily/weekly instance, counted from the later of the due date and completion day.
+
+        Counting from the completion day means an overdue task's next copy lands in the
+        future (today + 1 day for daily), not on another already-missed day.
+        """
         step = RECURRENCE_STEP.get(self.frequency)
         if step is None:
             return None
-        return replace(self, due_date=self.due_date + step, completed=False)
+        base = max(self.due_date, completed_on or date.today())
+        return replace(self, due_date=base + step, completed=False)
 
 
 @dataclass
@@ -269,11 +274,11 @@ class Scheduler:
                 )
         return warnings
 
-    def mark_task_complete(self, pet_name: str, task: Task) -> Optional[Task]:
-        """Complete a pet's task; for daily/weekly tasks, add and return the next occurrence."""
+    def mark_task_complete(self, pet_name: str, task: Task, on: Optional[date] = None) -> Optional[Task]:
+        """Complete a pet's task (on `on`, default today); for daily/weekly tasks, add and return the next one."""
         pet = self.owner.get_pet(pet_name)
         pet._index_of(task)  # raises if this task doesn't belong to that pet
-        next_task = task.mark_complete()
+        next_task = task.mark_complete(on)
         if next_task is not None:
             pet.add_task(next_task)
         return next_task
