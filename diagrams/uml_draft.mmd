@@ -1,0 +1,44 @@
+classDiagram
+    %% DRAFT (Phase 1): the initial four-class design, before implementation.
+    %% Reconstructed after the fact from reflection.md sections 1a/1b, because the
+    %% original draft file was overwritten by the final diagram.
+    %% Compare with uml_final.mmd to see how the design changed.
+
+    class Owner {
+        +str name
+        +int available_minutes
+        +list~Pet~ pets
+        +add_pet(pet: Pet) None
+        +get_all_tasks() list~Task~
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +int age
+        +list~Task~ tasks
+        +add_task(task: Task) None
+        +task_count() int
+    }
+
+    class Task {
+        +str description
+        +str time
+        +int duration_minutes
+        +str priority
+        +str frequency
+        +bool completed
+        +mark_complete() None
+    }
+
+    class Scheduler {
+        +Owner owner
+        +sort_by_time(tasks) list~Task~
+        +filter_tasks(pet_name, completed) list~Task~
+        +detect_conflicts(tasks) list~str~
+        +generate_plan() list~Task~
+    }
+
+    Owner "1" o-- "0..*" Pet : has
+    Pet "1" *-- "0..*" Task : owns
+    Scheduler --> Owner : reads pets/tasks via
